@@ -1,0 +1,14 @@
+[package]
+name = "viewport-app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+viewport-core = { path = "../viewport-core" }
+viewport-input = { path = "../viewport-input" }
+eframe = { workspace = true }
+egui = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

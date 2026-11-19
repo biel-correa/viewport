@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ViewPort Detached Session</title>
+  <link rel="icon" type="image/png" href="assets/viewport-mark.png" />
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      background: #000;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .detached-bar {
+      height: 40px;
+      background: rgba(18, 21, 30, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 100;
+    }
+    .detached-viewport {
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 40px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="detached-bar" data-tauri-drag-region="deep">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="status-dot connected"></span>
+      <span id="session-name" style="font-size: 13px; font-weight: 600;">Session</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="action-icon-btn" id="dock-btn" title="Reattach into main tabs">
+        <span>⤓</span> Dock to Tabs
+      </button>
+      <button class="action-icon-btn" id="fullscreen-btn" title="Toggle Fullscreen">
+        <span>⛶</span> Fullscreen
+      </button>
+      <button class="action-icon-btn" id="disconnect-btn" style="color: var(--status-error);" title="Disconnect">
+        <span>✕</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="detached-viewport">
+    <canvas id="detached-canvas" class="rdp-screen-canvas"></canvas>
+  </div>
+
+  <script type="module" src="js/detached.js"></script>
+</body>
+</html>

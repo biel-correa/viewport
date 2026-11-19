@@ -1,0 +1,14 @@
+{
+  "name": "viewport",
+  "version": "0.1.0",
+  "description": "High-Performance Pure Rust RDP Client with Modern Web UI",
+  "private": true,
+  "scripts": {
+    "dev": "npx @tauri-apps/cli dev",
+    "build": "npx @tauri-apps/cli build",
+    "desktop": "cargo run --bin viewport-desktop"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

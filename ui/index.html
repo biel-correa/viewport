@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ViewPort — macOS Remote Desktop Client</title>
+  <link rel="icon" type="image/png" href="assets/viewport-mark.png" />
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app" class="app-window">
+
+    <!-- A. Window Chrome & Multi-Session Tab Strip (Top Bar) -->
+    <header id="main-chrome" class="titlebar" data-tauri-drag-region="deep">
+      <div class="traffic-lights" aria-label="Window Controls">
+        <button class="tl-btn tl-close" id="tl-close-btn" title="Close Window"></button>
+        <button class="tl-btn tl-minimize" id="tl-minimize-btn" title="Minimize"></button>
+        <button class="tl-btn tl-zoom" id="tl-fullscreen-btn" title="Toggle Fullscreen"></button>
+      </div>
+
+      <!-- Draggable Tab Strip -->
+      <nav id="tab-strip" class="tab-strip" role="tablist" aria-label="Active Remote Sessions">
+        <!-- Rendered dynamically via JS -->
+      </nav>
+
+      <!-- Top Bar Right Quick Actions -->
+      <div class="titlebar-actions">
+        <div id="telemetry-badge" class="telemetry-pill hidden" title="Real-time RDP Stream Telemetry">
+          <i data-lucide="zap" class="icon-xs accent-cyan"></i>
+          <span id="telemetry-res" class="mono">1920×1080</span>
+          <span class="dot-sep">•</span>
+          <span id="telemetry-fps" class="mono">60 FPS</span>
+          <span class="dot-sep">•</span>
+          <span id="telemetry-ping" class="mono">-- ms</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- D. Detached Independent Window Top Bar -->
+    <header id="detached-chrome" class="titlebar detached-bar hidden" data-tauri-drag-region="deep">
+      <div class="traffic-lights">
+        <button class="tl-btn tl-close" id="btn-detached-close" title="Close Detached Session"></button>
+        <button class="tl-btn tl-minimize" id="btn-detached-minimize"></button>
+        <button class="tl-btn tl-zoom" id="btn-detached-zoom"></button>
+      </div>
+
+      <div class="detached-title">
+        <span class="status-dot connected"></span>
+        <span id="detached-session-label" class="mono">Remote Session</span>
+        <span class="detached-tag">Detached Window</span>
+      </div>
+
+      <div class="titlebar-actions">
+        <div class="telemetry-pill">
+          <i data-lucide="zap" class="icon-xs accent-cyan"></i>
+          <span id="detached-telemetry-label" class="mono">Connected</span>
+        </div>
+        <button id="btn-dock-back" class="btn-dock" title="Merge back into Main Window Tab Strip">
+          <span>⤓ Dock back to Tabs</span>
+        </button>
+        <button id="btn-detached-fullscreen" class="chrome-icon-btn" title="Toggle Fullscreen">
+          <i data-lucide="maximize-2"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Area -->
+    <main class="workspace">
+
+      <!-- B. Dashboard / Welcome Screen -->
+      <section id="dashboard-view" class="dashboard-view">
+        <div class="dashboard-container">
+
+          <!-- Hero Area & Search -->
+          <div class="hero-header">
+            <div class="brand-identity">
+              <div class="app-logo">
+                <img src="assets/viewport-mark.png" alt="ViewPort Logo" class="app-logo-img" />
+              </div>
+              <div>
+                <div class="title-row">
+                  <h1>ViewPort</h1>
+                  <span class="version-badge">Tauri 2 • macOS ARM64</span>
+                </div>
+                <p class="subtitle">Sleek macOS Remote Desktop client powered by pure Rust (IronRDP)</p>
+              </div>
+            </div>
+
+            <div class="search-box">
+              <i data-lucide="search" class="search-icon"></i>
+              <input
+                type="text"
+                id="search-hosts"
+                placeholder="Filter saved PCs, groups or IPs..."
+                autocomplete="off"
+              />
+              <kbd class="shortcut-hint">⌘K</kbd>
+            </div>
+          </div>
+
+          <!-- Main Dashboard Split Grid -->
+          <div class="dashboard-grid">
+
+            <!-- Left Column: Windows App Style "Add PC" Card -->
+            <div class="glass-card add-pc-card">
+              <div class="card-header">
+                <h2 id="form-card-title">Connect to PC</h2>
+                <span class="protocol-tag mono">RDP 10.8</span>
+              </div>
+
+              <form id="add-pc-form" autocomplete="off">
+
+                <!-- Essential Fields (Always Visible - macOS Horizontal Form Alignment) -->
+                <div class="mac-form-Section">
+                  <div class="mac-field-row">
+                    <label for="pc-friendly" class="mac-label">Nickname:</label>
+                    <div class="mac-input-col">
+                      <input
+                        type="text"
+                        id="pc-friendly"
+                        class="mac-input"
+                        placeholder="Optional (shown on tab &amp; card)"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="mac-field-row">
+                    <label for="pc-name" class="mac-label">PC name:</label>
+                    <div class="mac-input-col">
+                      <input
+                        type="text"
+                        id="pc-name"
+                        class="mac-input mono"
+                        placeholder="Host name or IP[:port] (e.g. 192.168.1.50)"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div class="mac-field-row">
+                    <label for="custom-user" class="mac-label">Username:</label>
+                    <div class="mac-input-col">
+                      <input
+                        type="text"
+                        id="custom-user"
+                        class="mac-input"
+                        placeholder="DOMAIN\username or Administrator"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div class="mac-field-row">
+                    <label for="custom-pass" class="mac-label">Password:</label>
+                    <div class="mac-input-col">
+                      <input
+                        type="password"
+                        id="custom-pass"
+                        class="mac-input"
+                        placeholder="Password"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Progressive Disclosure Toggle Button -->
+                <div class="disclosure-bar">
+                  <button type="button" id="btn-toggle-advanced" class="btn-disclosure" aria-expanded="false">
+                    <i data-lucide="chevron-right" id="disclosure-icon" class="disclosure-chevron"></i>
+                    <span>Advanced Options (General, Display, Audio, Keyboard, Folders)</span>
+                  </button>
+                </div>
+
+                <!-- Collapsible Windows App Tabbed Container (Hidden by Default) -->
+                <div id="advanced-container" class="advanced-container hidden">
+
+                  <!-- macOS Segmented Tab Bar -->
+                  <div class="mac-segmented-control" role="tablist">
+                    <button type="button" class="seg-tab active" data-tab="general" role="tab">General</button>
+                    <button type="button" class="seg-tab" data-tab="display" role="tab">Display</button>
+                    <button type="button" class="seg-tab" data-tab="devices" role="tab">Devices & Audio</button>
+                    <button type="button" class="seg-tab" data-tab="keyboard" role="tab">Keyboard</button>
+                    <button type="button" class="seg-tab" data-tab="folders" role="tab">Folders</button>
+                  </div>
+
+                  <!-- Inner Bordered Tab Box (Matches Windows App Frame) -->
+                  <div class="mac-tab-box">
+
+                    <!-- TAB 1: General (Exact Windows App Fields) -->
+                    <div id="tab-pane-general" class="mac-tab-pane active">
+                      <div class="mac-field-row">
+                        <label for="pc-group" class="mac-label">Group:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="pc-group" class="mac-select">
+                              <option value="Saved PCs">Saved PCs</option>
+                              <option value="Work Laptops">Work Laptops</option>
+                              <option value="Production Servers">Production Servers</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
+                      <div class="mac-field-row">
+                        <label for="pc-gateway" class="mac-label">Gateway:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="pc-gateway" class="mac-select">
+                              <option value="none">No gateway</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row checkbox-row">
+                        <span class="mac-label-spacer"></span>
+                        <div class="mac-input-col">
+                          <label id="lbl-bypass-gw" class="mac-checkbox-label disabled">
+                            <input type="checkbox" id="chk-bypass-gw" checked disabled />
+                            <span class="mac-chk-visual"></span>
+                            <span>Bypass for local addresses</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
+                      <div class="mac-field-row checkbox-row">
+                        <span class="mac-label-spacer"></span>
+                        <div class="mac-input-col checkbox-stack">
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-nla" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Network Level Authentication (NLA / CredSSP)</span>
+                          </label>
+
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-reconnect" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Reconnect if the connection is dropped</span>
+                          </label>
+
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-swap-mouse" />
+                            <span class="mac-chk-visual"></span>
+                            <span>Swap mouse buttons</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
+                      <div class="mac-field-row">
+                        <label for="pc-mac" class="mac-label">MAC address:</label>
+                        <div class="mac-input-col mac-input-with-btn">
+                          <input
+                            type="text"
+                            id="pc-mac"
+                            class="mac-input mono"
+                            placeholder="Optional (AA:BB:CC:DD:EE:FF for Wake-on-LAN)"
+                          />
+                          <button type="button" id="btn-detect-mac" class="btn-inline-detect" title="Detect MAC from local ARP cache (host must be online on LAN)">
+                            Detect
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row">
+                        <label for="pc-wol-broadcast" class="mac-label">WoL broadcast:</label>
+                        <div class="mac-input-col">
+                          <input
+                            type="text"
+                            id="pc-wol-broadcast"
+                            class="mac-input mono"
+                            placeholder="Auto (LAN broadcast, e.g. 192.168.29.255)"
+                          />
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row checkbox-row">
+                        <span class="mac-label-spacer"></span>
+                        <div class="mac-input-col">
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-wol-connect" />
+                            <span class="mac-chk-visual"></span>
+                            <span>Send Wake-on-LAN before connecting</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- TAB 2: Display -->
+                    <div id="tab-pane-display" class="mac-tab-pane hidden">
+                      <div class="mac-field-row">
+                        <label for="pc-resolution" class="mac-label">Resolution:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="pc-resolution" class="mac-select">
+                              <option value="fit" data-scale="Auto-Fit" selected>Fit to Free Space (Auto-Adapt)</option>
+                              <option value="1920x1080" data-scale="1x FHD">Full HD (1920 × 1080)</option>
+                              <option value="2560x1440" data-scale="1x QHD">QHD (2560 × 1440)</option>
+                              <option value="2880x1800" data-scale="2x HiDPI">Native Retina (2880 × 1800 HiDPI)</option>
+                              <option value="3840x2160" data-scale="2x UHD">4K UHD (3840 × 2160)</option>
+                              <option value="1280x720" data-scale="1x HD">HD (1280 × 720)</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row">
+                        <label for="pc-color-depth" class="mac-label">Color quality:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="pc-color-depth" class="mac-select">
+                              <option value="32">High Color (32 bit)</option>
+                              <option value="24">True Color (24 bit)</option>
+                              <option value="16">Medium (16 bit - Low Bandwidth)</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
+                      <div class="mac-field-row checkbox-row">
+                        <span class="mac-label-spacer"></span>
+                        <div class="mac-input-col checkbox-stack">
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-dynamic-res" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Update the session resolution on resize</span>
+                          </label>
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-retina" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Optimize for Retina displays (Integer Scaling)</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- TAB 3: Devices & Audio -->
+                    <div id="tab-pane-devices" class="mac-tab-pane hidden">
+                      <div class="mac-field-row">
+                        <label for="pc-audio-out" class="mac-label">Play sound:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="pc-audio-out" class="mac-select">
+                              <option value="local">On this Mac</option>
+                              <option value="remote">On the remote PC</option>
+                              <option value="mute">Never play sound</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
+                      <div class="mac-field-row checkbox-row">
+                        <span class="mac-label-spacer"></span>
+                        <div class="mac-input-col checkbox-stack">
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-clipboard" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Clipboard (Copy & Paste text/files)</span>
+                          </label>
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-mic" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Microphone redirection</span>
+                          </label>
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-camera" checked />
+                            <span class="mac-chk-visual"></span>
+                            <span>Webcam / Camera redirection</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- TAB 4: Keyboard Mapping (Per Connection) -->
+                    <div id="tab-pane-keyboard" class="mac-tab-pane hidden">
+                      <div class="keymap-preset-bar">
+                        <button type="button" id="btn-keymap-mac-win" class="btn-keymap-preset">
+                          Mac → Windows (⌘→Ctrl, ⌥→Alt, ⌃→Super)
+                        </button>
+                        <button type="button" id="btn-keymap-reset" class="btn-keymap-preset secondary">
+                          Reset Defaults
+                        </button>
+                      </div>
+
+                      <div class="mac-field-row">
+                        <label for="key-map-meta" class="mac-label">Command (⌘):</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="key-map-meta" class="mac-select">
+                              <option value="Meta">Default (Super / Win)</option>
+                              <option value="Control">Ctrl (Control)</option>
+                              <option value="Alt">Alt</option>
+                              <option value="Shift">Shift</option>
+                              <option value="None">Disabled</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row">
+                        <label for="key-map-alt" class="mac-label">Option (⌥):</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="key-map-alt" class="mac-select">
+                              <option value="Alt">Default (Alt)</option>
+                              <option value="Control">Ctrl (Control)</option>
+                              <option value="Meta">Super (Win)</option>
+                              <option value="Shift">Shift</option>
+                              <option value="None">Disabled</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row">
+                        <label for="key-map-ctrl" class="mac-label">Control (⌃):</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="key-map-ctrl" class="mac-select">
+                              <option value="Control">Default (Ctrl)</option>
+                              <option value="Meta">Super (Win)</option>
+                              <option value="Alt">Alt</option>
+                              <option value="Shift">Shift</option>
+                              <option value="None">Disabled</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mac-field-row">
+                        <label for="key-map-caps" class="mac-label">Caps Lock:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="key-map-caps" class="mac-select">
+                              <option value="CapsLock">Default (Caps Lock)</option>
+                              <option value="Control">Ctrl (Control)</option>
+                              <option value="Alt">Alt</option>
+                              <option value="Meta">Super (Win)</option>
+                              <option value="Escape">Escape</option>
+                              <option value="None">Disabled</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
+                      <div class="keymap-custom-header">
+                        <span>Custom Key Rules</span>
+                        <button type="button" id="btn-add-keyrule" class="btn-keymap-preset secondary">+ Add Rule</button>
+                      </div>
+                      <div id="custom-keymap-list" class="keymap-custom-list"></div>
+                    </div>
+
+                    <!-- TAB 5: Folders -->
+                    <div id="tab-pane-folders" class="mac-tab-pane hidden">
+                      <div class="mac-field-row checkbox-row">
+                        <span class="mac-label-spacer"></span>
+                        <div class="mac-input-col checkbox-stack">
+                          <label class="mac-checkbox-label">
+                            <input type="checkbox" id="chk-redirect-folders" />
+                            <span class="mac-chk-visual"></span>
+                            <span>Redirect local macOS folders to remote session</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- Card Footer Actions -->
+                <div class="add-pc-footer">
+                  <button type="button" id="btn-reset-form" class="btn-mac-cancel">Reset</button>
+                  <div class="footer-right-btns">
+                    <button type="button" id="btn-save-only" class="btn-mac-add">Save to PCs</button>
+                    <button type="submit" class="btn-mac-connect">
+                      <i data-lucide="play"></i>
+                      <span>Connect</span>
+                    </button>
+                  </div>
+                </div>
+
+              </form>
+            </div>
+
+            <!-- Right Column: Saved / Recent Connections Grid -->
+            <div class="saved-connections-section">
+              <div class="section-header">
+                <h2>Saved PCs</h2>
+                <span id="saved-count" class="count-pill">0 machines</span>
+              </div>
+
+              <div id="saved-grid" class="saved-grid">
+                <!-- Populated dynamically via JS -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- C. Active Remote Session View (The Desktop Canvas) -->
+      <section id="session-view" class="session-view hidden">
+
+        <!-- Edge-to-Edge Remote Desktop Surface Wrapper -->
+        <div id="canvas-viewport" class="canvas-viewport">
+          <canvas id="rdp-canvas" class="pixelated" width="1920" height="1080" tabindex="0"></canvas>
+        </div>
+
+        <!-- E1. Connecting State Overlay -->
+        <div id="connecting-overlay" class="connecting-overlay hidden">
+          <div class="connecting-box">
+            <div class="spinner-ring"></div>
+            <h3 id="connecting-title">Establishing Secure RDP Tunnel</h3>
+            <p id="connecting-subtext" class="mono">Negotiating TLS & NLA handshake...</p>
+            <div class="handshake-steps">
+              <span class="step done">TCP</span>
+              <span class="step active">TLS / CredSSP</span>
+              <span class="step">FastPath Graphics</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- E2. Disconnect / Error Modal -->
+        <div id="error-modal" class="error-modal-backdrop hidden" role="dialog" aria-modal="true">
+          <div class="error-modal-card">
+            <div class="error-header">
+              <div class="error-icon-badge">
+                <i data-lucide="wifi-off"></i>
+              </div>
+              <div>
+                <h3>Remote Session Disconnected</h3>
+                <span id="error-code-label" class="error-code mono">RDP_CONNECTION_ERROR</span>
+              </div>
+            </div>
+            <p id="error-description" class="error-body">
+              Connection to remote host failed.
+            </p>
+            <div class="error-meta mono">
+              <span>Target: <strong id="error-host-label">-</strong></span>
+              <span>Auto-Reconnect: <strong id="error-reconnect-label">Enabled</strong></span>
+            </div>
+            <div class="error-actions">
+              <button id="btn-error-wake" class="btn-secondary hidden">
+                <i data-lucide="power"></i>
+                <span>Wake Host</span>
+              </button>
+              <button id="btn-error-edit" class="btn-secondary">
+                <i data-lucide="sliders-horizontal"></i>
+                <span>Edit Settings</span>
+              </button>
+              <button id="btn-error-retry" class="btn-retry">
+                <i data-lucide="refresh-cw"></i>
+                <span>Retry Connection</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <!-- Session Tab Context Menu (Right-click on session tab) -->
+  <div id="tab-context-menu" class="tab-context-menu hidden" role="menu">
+    <div class="ctx-header">
+      <span id="ctx-tab-title" class="ctx-title mono">Remote Session</span>
+      <span id="ctx-tab-quality" class="ctx-meta mono">1920×1080</span>
+    </div>
+    <div class="ctx-divider"></div>
+    <button id="ctx-cad-btn" class="ctx-item" role="menuitem">
+      <i data-lucide="keyboard"></i>
+      <span>Ctrl+Alt+Del</span>
+    </button>
+    <button id="ctx-detach-btn" class="ctx-item" role="menuitem">
+      <span class="ctx-glyph">⧉</span>
+      <span>Detach</span>
+    </button>
+    <button id="ctx-fullscreen-btn" class="ctx-item" role="menuitem">
+      <span class="ctx-glyph">⛶</span>
+      <span>Fullscreen</span>
+    </button>
+    <div class="ctx-divider"></div>
+    <button id="ctx-disconnect-btn" class="ctx-item ctx-item-danger" role="menuitem">
+      <span class="ctx-glyph">✕</span>
+      <span>Disconnect</span>
+    </button>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
