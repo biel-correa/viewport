@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use viewport_core::{RdpConfig, SessionId, SessionManager};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tracing::info;
 
 pub struct AppState {
@@ -163,13 +165,20 @@ pub async fn detach_tab(
 
     info!("Creating detached window: label={}, url={}", window_label, url);
 
-    let win = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(url.into()))
+    let mut builder = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(url.into()))
         .title(&win_title)
         .inner_size(1120.0, 760.0)
         .min_inner_size(720.0, 480.0)
-        .resizable(true)
-        .title_bar_style(TitleBarStyle::Overlay)
-        .hidden_title(true)
+        .resizable(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let win = builder
         .build()
         .map_err(|e| format!("Failed to create detached window: {}", e))?;
 

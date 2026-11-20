@@ -25,7 +25,7 @@ ironrdp-rdpsnd-native = { version = "0.8.0", default-features = false, features 
 ironrdp-rdpecam = "0.2.0"
 ironrdp-tls = { version = "0.3.0", features = ["rustls"] }
 cc = "1.1"
-eframe = { version = "0.31.0", default-features = false, features = ["default_fonts", "wgpu"] }
+eframe = { version = "0.31.0", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"] }
 egui = "0.31.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
