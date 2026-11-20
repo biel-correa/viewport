@@ -364,11 +364,13 @@ button {
 .dashboard-view {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 26px 24px 42px;
 }
 
 .dashboard-container {
   max-width: 1220px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -647,9 +649,13 @@ button {
 /* Dashboard Split Grid */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
+}
+
+.dashboard-grid > * {
+  min-width: 0;
 }
 
 /* ==========================================================================
@@ -1087,6 +1093,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .section-header {
@@ -1111,7 +1118,7 @@ button {
 
 .saved-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 14px;
 }
 
@@ -1123,6 +1130,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
   transition: all 0.2s ease;
 }
 
@@ -1183,18 +1191,24 @@ button {
 
 .host-meta {
   flex: 1;
+  min-width: 0;
 }
 
 .host-meta h3 {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .host-ip {
   font-size: 12px;
   color: var(--accent-cyan);
   margin-top: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .host-group-tag {
@@ -1204,12 +1218,16 @@ button {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .host-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
 }
@@ -1254,6 +1272,7 @@ button {
 .host-card-footer-btns {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1559,15 +1578,11 @@ button {
   .search-box {
     max-width: 320px;
   }
-
-  .saved-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (min-width: 1060px) {
   .dashboard-grid {
-    grid-template-columns: 490px 1fr;
+    grid-template-columns: minmax(400px, 470px) minmax(0, 1fr);
   }
 }
 
