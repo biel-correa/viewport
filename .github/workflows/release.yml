@@ -22,11 +22,38 @@ concurrency:
 
 jobs:
   verify:
-    name: Check & Test
-    runs-on: macos-latest
+    name: Check & Test (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
+          - name: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev \
+            pkg-config
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -40,13 +67,138 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Verify frontend JS & Rust workspace
-        run: make check test
+        shell: bash
+        run: |
+          cargo check --workspace
+          cargo test --workspace
+          shopt -s nullglob
+          for f in ui/script.js ui/js/*.js; do
+            node --check "$f"
+          done
 
-  release:
-    name: Build & Publish Release
+  build:
+    name: Build (${{ matrix.name }})
     needs: verify
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Universal
+            os: macos-latest
+            artifact_name: macos-universal
+            tauri_args: "--target universal-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            bundle_dir: "target/universal-apple-darwin/release/bundle"
+          - name: Windows x64
+            os: windows-latest
+            artifact_name: windows-x64
+            tauri_args: ""
+            rust_targets: "x86_64-pc-windows-msvc"
+            bundle_dir: "target/release/bundle"
+          - name: Linux x64
+            os: ubuntu-latest
+            artifact_name: linux-x64
+            tauri_args: ""
+            rust_targets: "x86_64-unknown-linux-gnu"
+            bundle_dir: "target/release/bundle"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev \
+            patchelf \
+            rpm \
+            pkg-config
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build ViewPort production bundle
+        shell: bash
+        env:
+          CI: "true"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+            echo "Signing key detected: enabling signed Tauri updater artifacts."
+            npx --yes @tauri-apps/cli build ${{ matrix.tauri_args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "No TAURI_SIGNING_PRIVATE_KEY secret set: building standard installers (download-fallback mode)."
+            npx --yes @tauri-apps/cli build ${{ matrix.tauri_args }}
+          fi
+
+      - name: Package release artifacts
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          BUNDLE_DIR="${{ matrix.bundle_dir }}"
+          shopt -s nullglob
+
+          # macOS (.dmg + zipped .app + signed updater .app.tar.gz/.sig)
+          for f in "$BUNDLE_DIR"/dmg/*.dmg "$BUNDLE_DIR"/macos/*.app.tar.gz "$BUNDLE_DIR"/macos/*.app.tar.gz.sig; do
+            cp "$f" release-artifacts/
+          done
+          for app in "$BUNDLE_DIR"/macos/*.app; do
+            app_name="$(basename "$app" .app)"
+            ditto -c -k --sequesterRsrc --keepParent "$app" "release-artifacts/${app_name}-universal-macos.app.zip"
+          done
+
+          # Windows (.exe NSIS + .msi + .sig updater signatures)
+          for f in "$BUNDLE_DIR"/nsis/*.exe "$BUNDLE_DIR"/nsis/*.exe.sig "$BUNDLE_DIR"/msi/*.msi "$BUNDLE_DIR"/msi/*.msi.sig; do
+            cp "$f" release-artifacts/
+          done
+
+          # Linux (.AppImage, .deb, .rpm + .AppImage.sig)
+          for f in "$BUNDLE_DIR"/appimage/*.AppImage "$BUNDLE_DIR"/appimage/*.AppImage.sig "$BUNDLE_DIR"/deb/*.deb "$BUNDLE_DIR"/rpm/*.rpm; do
+            cp "$f" release-artifacts/
+          done
+
+          ls -lh release-artifacts/
+
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewport-${{ matrix.artifact_name }}
+          path: release-artifacts/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -58,39 +210,15 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Setup Rust toolchain (Apple Silicon + Intel)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          pattern: viewport-*
+          path: release-artifacts
+          merge-multiple: true
 
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Node dependencies
-        run: npm install
-
-      - name: Build Universal macOS production bundle
-        env:
-          CI: "true"
-        run: make universal
-
-      - name: Package release artifacts
-        shell: bash
-        run: |
-          mkdir -p release-artifacts
-          BUNDLE_DIR="target/universal-apple-darwin/release/bundle"
-
-          shopt -s nullglob
-          for dmg in "$BUNDLE_DIR"/dmg/*.dmg; do
-            cp "$dmg" release-artifacts/
-          done
-
-          for app in "$BUNDLE_DIR"/macos/*.app; do
-            app_name="$(basename "$app" .app)"
-            ditto -c -k --sequesterRsrc --keepParent "$app" "release-artifacts/${app_name}-universal-macos.app.zip"
-          done
-
-          ls -lh release-artifacts/
+      - name: List downloaded artifacts
+        run: ls -lh release-artifacts/
 
       - name: Resolve release tag
         id: meta
@@ -105,6 +233,76 @@ jobs:
             TAG="v${VERSION}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Tauri updater manifest (latest.json)
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          node - <<'EOF'
+          const fs = require("fs");
+          const path = require("path");
+
+          const dir = "release-artifacts";
+          const tag = process.env.RELEASE_TAG;
+          const version = tag.replace(/^v/i, "");
+          const repo = process.env.GITHUB_REPO;
+          const files = fs.readdirSync(dir);
+
+          const baseUrl = `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}`;
+          const readSig = (asset) => {
+            const sigName = `${asset}.sig`;
+            if (!files.includes(sigName)) return null;
+            return fs.readFileSync(path.join(dir, sigName), "utf8").trim();
+          };
+          const makeEntry = (asset) => {
+            const signature = readSig(asset);
+            if (!signature) return null;
+            return {
+              signature,
+              url: `${baseUrl}/${encodeURIComponent(asset)}`,
+            };
+          };
+
+          const platforms = {};
+
+          const macUpdater = files.find((f) => f.endsWith(".app.tar.gz"));
+          if (macUpdater) {
+            const entry = makeEntry(macUpdater);
+            if (entry) {
+              platforms["darwin-aarch64"] = entry;
+              platforms["darwin-x86_64"] = entry;
+            }
+          }
+
+          const winUpdater =
+            files.find((f) => f.endsWith(".exe") && files.includes(`${f}.sig`)) ||
+            files.find((f) => f.endsWith(".msi") && files.includes(`${f}.sig`));
+          if (winUpdater) {
+            const entry = makeEntry(winUpdater);
+            if (entry) platforms["windows-x86_64"] = entry;
+          }
+
+          const linuxUpdater = files.find((f) => f.endsWith(".AppImage") && files.includes(`${f}.sig`));
+          if (linuxUpdater) {
+            const entry = makeEntry(linuxUpdater);
+            if (entry) platforms["linux-x86_64"] = entry;
+          }
+
+          if (Object.keys(platforms).length > 0) {
+            const manifest = {
+              version,
+              notes: `ViewPort ${tag} — see GitHub Release for full changelog.`,
+              pub_date: new Date().toISOString(),
+              platforms,
+            };
+            fs.writeFileSync(path.join(dir, "latest.json"), JSON.stringify(manifest, null, 2) + "\n");
+            console.log("Generated release-artifacts/latest.json for platforms:", Object.keys(platforms));
+          } else {
+            console.log("No signed updater .sig artifacts found; skipping latest.json generation.");
+          }
+          EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
