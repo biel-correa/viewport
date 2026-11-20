@@ -9,6 +9,7 @@ use tracing_subscriber::{fmt, EnvFilter, Registry};
 
 mod commands;
 mod stream_server;
+mod updater;
 
 use commands::{
     connect_session, detach_tab, detect_mac_address, disconnect_session, dock_tab, get_stream_port,
@@ -50,6 +51,8 @@ pub fn run() {
     let session_manager = Arc::new(SessionManager::new());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup({
             let sm = Arc::clone(&session_manager);
             move |app| {
@@ -102,6 +105,10 @@ pub fn run() {
             wake_on_lan,
             detect_mac_address,
             probe_tcp_port,
+            updater::get_app_version,
+            updater::check_for_update,
+            updater::install_update,
+            updater::open_download_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -87,9 +87,13 @@
               <div>
                 <div class="title-row">
                   <h1>ViewPort</h1>
-                  <span class="version-badge">Tauri 2 • macOS ARM64</span>
+                  <span id="app-version-badge" class="version-badge">v0.1.0</span>
+                  <button type="button" id="btn-check-update" class="btn-check-update" title="Check for updates">
+                    <i data-lucide="refresh-cw" class="icon-xs"></i>
+                    <span>Updates</span>
+                  </button>
                 </div>
-                <p class="subtitle">Sleek macOS Remote Desktop client powered by pure Rust (IronRDP)</p>
+                <p class="subtitle">Sleek Remote Desktop client powered by pure Rust (IronRDP)</p>
               </div>
             </div>
 
@@ -102,6 +106,30 @@
                 autocomplete="off"
               />
               <kbd class="shortcut-hint">⌘K</kbd>
+            </div>
+          </div>
+
+          <!-- Software Update Banner (auto-update with download fallback) -->
+          <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
+            <div class="update-banner-left">
+              <div class="update-banner-icon">
+                <i data-lucide="download-cloud" class="icon-sm"></i>
+              </div>
+              <div class="update-banner-copy">
+                <div id="update-banner-title" class="update-banner-title">Update available</div>
+                <div id="update-banner-sub" class="update-banner-sub">A newer version of ViewPort is ready.</div>
+                <div id="update-progress-wrap" class="update-progress-wrap hidden">
+                  <div id="update-progress-bar" class="update-progress-bar"></div>
+                </div>
+              </div>
+            </div>
+            <div class="update-banner-actions">
+              <button type="button" id="btn-update-notes" class="btn-update-secondary">Release Notes</button>
+              <button type="button" id="btn-update-action" class="btn-update-primary">
+                <i data-lucide="arrow-down-circle" class="icon-xs"></i>
+                <span>Download Update</span>
+              </button>
+              <button type="button" id="btn-update-dismiss" class="btn-update-dismiss" title="Dismiss">✕</button>
             </div>
           </div>
 
