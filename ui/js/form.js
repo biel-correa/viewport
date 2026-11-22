@@ -6,6 +6,7 @@ import { DEFAULT_KEY_MAP } from './scancodes.js';
 import { isTauri, invoke } from './tauri.js';
 import { persistSavedMachines } from './state.js';
 import { parseCredentials, parseHostAndPort } from './utils.js';
+import { decodeRdpBuffer, parseRdpContent } from './rdp-file.js';
 
 export function createConnectionFormController({
   state,
@@ -145,13 +146,42 @@ export function createConnectionFormController({
     onSavedMachinesChange();
   }
 
+  function showImportStatus(message, variant = 'success') {
+    if (!dom.rdpImportStatus) return;
+    dom.rdpImportStatus.textContent = message;
+    dom.rdpImportStatus.classList.remove('hidden', 'is-warning', 'is-error');
+    if (variant === 'warning') dom.rdpImportStatus.classList.add('is-warning');
+    if (variant === 'error') dom.rdpImportStatus.classList.add('is-error');
+  }
+
+  function hideImportStatus() {
+    if (!dom.rdpImportStatus) return;
+    dom.rdpImportStatus.classList.add('hidden');
+    dom.rdpImportStatus.classList.remove('is-warning', 'is-error');
+  }
+
+  function ensureResolutionOption(resValue) {
+    if (!dom.pcResolutionSelect || !resValue) return;
+    const exists = Array.from(dom.pcResolutionSelect.options).some((opt) => opt.value === resValue);
+    if (!exists && /^\d+x\d+$/.test(resValue)) {
+      const opt = document.createElement('option');
+      opt.value = resValue;
+      opt.dataset.scale = 'Custom';
+      opt.textContent = `Custom (${resValue.replace('x', ' × ')})`;
+      dom.pcResolutionSelect.appendChild(opt);
+    }
+  }
+
   function populateFormFromMachine(machine) {
     dom.pcFriendlyInput.value = machine.nickname || (machine.name !== machine.ip ? machine.name : '');
     dom.pcNameInput.value = machine.port && machine.port !== 3389 ? `${machine.ip}:${machine.port}` : machine.ip;
     dom.customUserInput.value = machine.domain ? `${machine.domain}\\${machine.user}` : machine.user;
     dom.customPassInput.value = machine.password || '';
     if (machine.group) dom.pcGroupSelect.value = machine.group;
-    if (machine.resolution) dom.pcResolutionSelect.value = machine.resolution;
+    if (machine.resolution) {
+      ensureResolutionOption(machine.resolution);
+      dom.pcResolutionSelect.value = machine.resolution;
+    }
     if (dom.pcColorDepthSelect && machine.colorDepth) {
       dom.pcColorDepthSelect.value = String(machine.colorDepth);
     }
@@ -194,7 +224,123 @@ export function createConnectionFormController({
     keymap.applyKeyMapToForm(DEFAULT_KEY_MAP);
     if (dom.chkBypassGw) dom.chkBypassGw.disabled = true;
     if (dom.lblBypassGw) dom.lblBypassGw.classList.add('disabled');
+    hideImportStatus();
     setEditingMachine(null);
+  }
+
+  async function importRdpFiles(fileList) {
+    const files = Array.from(fileList || []).filter((f) => f && f.name);
+    if (files.length === 0) return;
+
+    const imported = [];
+    const errors = [];
+
+    for (const file of files) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const text = decodeRdpBuffer(buffer);
+        const parsed = parseRdpContent(text, file.name);
+        imported.push({ fileName: file.name, ...parsed });
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message || err}`);
+      }
+    }
+
+    if (imported.length === 0) {
+      showImportStatus(`Failed to import .rdp file — ${errors[0] || 'invalid file format.'}`, 'error');
+      return;
+    }
+
+    // Single .rdp file: populate the form cleanly for immediate review, Save, or Connect
+    if (imported.length === 1) {
+      const { fileName, machine, warnings } = imported[0];
+      setEditingMachine(null);
+      populateFormFromMachine(machine);
+
+      const summary =
+        warnings.length > 0
+          ? `Imported ${fileName}. ${warnings.join(' ')}`
+          : `Imported ${fileName} — click Save to PCs or Connect.`;
+      showImportStatus(summary, warnings.length > 0 ? 'warning' : 'success');
+
+      if (!machine.user) {
+        dom.customUserInput.focus();
+      } else {
+        dom.customPassInput.focus();
+      }
+      return;
+    }
+
+    // Multiple .rdp files: bulk-add/update directly into Saved PCs
+    for (const { machine } of imported) {
+      const existingIdx = state.savedMachines.findIndex(
+        (m) => m.ip === machine.ip && Number(m.port || 3389) === Number(machine.port || 3389) && m.user === machine.user
+      );
+      if (existingIdx !== -1) {
+        state.savedMachines[existingIdx] = {
+          ...state.savedMachines[existingIdx],
+          ...machine,
+          id: state.savedMachines[existingIdx].id,
+          password: state.savedMachines[existingIdx].password || ''
+        };
+      } else {
+        state.savedMachines.unshift(machine);
+      }
+    }
+
+    persistSavedMachines(state.savedMachines);
+    onSavedMachinesChange();
+
+    const statusMsg =
+      errors.length > 0
+        ? `Imported ${imported.length} .rdp files into Saved PCs (${errors.length} skipped).`
+        : `Imported ${imported.length} .rdp files into Saved PCs.`;
+    showImportStatus(statusMsg, errors.length > 0 ? 'warning' : 'success');
+  }
+
+  if (dom.btnImportRdp && dom.rdpFileInput) {
+    dom.btnImportRdp.addEventListener('click', () => {
+      dom.rdpFileInput.value = '';
+      dom.rdpFileInput.click();
+    });
+
+    dom.rdpFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        importRdpFiles(e.target.files);
+      }
+    });
+  }
+
+  if (dom.addPcCard) {
+    const hasFiles = (e) =>
+      Boolean(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+
+    dom.addPcCard.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      dom.addPcCard.classList.add('rdp-drag-over');
+    });
+
+    dom.addPcCard.addEventListener('dragleave', (e) => {
+      if (!dom.addPcCard.contains(e.relatedTarget)) {
+        dom.addPcCard.classList.remove('rdp-drag-over');
+      }
+    });
+
+    dom.addPcCard.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dom.addPcCard.classList.remove('rdp-drag-over');
+      const rdpFiles = Array.from(e.dataTransfer.files || []).filter((f) =>
+        f.name.toLowerCase().endsWith('.rdp')
+      );
+      if (rdpFiles.length === 0) {
+        showImportStatus('Drop a .rdp file to import connection settings.', 'warning');
+        return;
+      }
+      importRdpFiles(rdpFiles);
+    });
   }
 
   if (dom.btnSaveOnly) {

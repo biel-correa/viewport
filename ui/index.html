@@ -137,11 +137,20 @@
           <div class="dashboard-grid">
 
             <!-- Left Column: Windows App Style "Add PC" Card -->
-            <div class="glass-card add-pc-card">
+            <div id="add-pc-card" class="glass-card add-pc-card">
               <div class="card-header">
                 <h2 id="form-card-title">Connect to PC</h2>
-                <span class="protocol-tag mono">RDP 10.8</span>
+                <div class="card-header-right">
+                  <button type="button" id="btn-import-rdp" class="btn-import-rdp" title="Import connection settings from a .rdp file (or drop .rdp files here)">
+                    <i data-lucide="file-up" class="icon-xs"></i>
+                    <span>Import .rdp</span>
+                  </button>
+                  <input type="file" id="rdp-file-input" accept=".rdp,text/plain" multiple class="hidden" />
+                  <span class="protocol-tag mono">RDP 10.8</span>
+                </div>
               </div>
+
+              <div id="rdp-import-status" class="rdp-import-status hidden" role="status"></div>
 
               <form id="add-pc-form" autocomplete="off">
 

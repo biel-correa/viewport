@@ -22,6 +22,10 @@ export function getDomRefs() {
     searchInput: document.getElementById('search-hosts'),
 
     // Form Elements
+    addPcCard: document.getElementById('add-pc-card'),
+    btnImportRdp: document.getElementById('btn-import-rdp'),
+    rdpFileInput: document.getElementById('rdp-file-input'),
+    rdpImportStatus: document.getElementById('rdp-import-status'),
     addPcForm: document.getElementById('add-pc-form'),
     pcNameInput: document.getElementById('pc-name'),
     customUserInput: document.getElementById('custom-user'),
