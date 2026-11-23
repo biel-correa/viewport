@@ -431,6 +431,21 @@
 
                     <!-- TAB 4: Keyboard Mapping (Per Connection) -->
                     <div id="tab-pane-keyboard" class="mac-tab-pane hidden">
+                      <div class="mac-field-row">
+                        <label for="key-map-mode" class="mac-label">Layout sync:</label>
+                        <div class="mac-input-col">
+                          <div class="mac-select-wrapper">
+                            <select id="key-map-mode" class="mac-select">
+                              <option value="unicode">Sync with local layout (Unicode)</option>
+                              <option value="scancode">Use remote layout (Hardware Scancodes)</option>
+                            </select>
+                            <span class="select-chevrons">⌄</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="mac-divider" />
+
                       <div class="keymap-preset-bar">
                         <button type="button" id="btn-keymap-mac-win" class="btn-keymap-preset">
                           Mac → Windows (⌘→Ctrl, ⌥→Alt, ⌃→Super)
@@ -568,6 +583,16 @@
         <!-- Edge-to-Edge Remote Desktop Surface Wrapper -->
         <div id="canvas-viewport" class="canvas-viewport">
           <canvas id="rdp-canvas" class="pixelated" width="1920" height="1080" tabindex="0"></canvas>
+          <textarea
+            id="rdp-ime-input"
+            class="rdp-ime-input"
+            aria-hidden="true"
+            tabindex="-1"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+          ></textarea>
         </div>
 
         <!-- E1. Connecting State Overlay -->

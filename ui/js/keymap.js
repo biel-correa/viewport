@@ -44,6 +44,7 @@ export function createKeymapController(dom) {
       });
     }
     return {
+      mode: dom.keyMapModeSelect ? dom.keyMapModeSelect.value : DEFAULT_KEY_MAP.mode,
       meta: dom.keyMapMetaSelect ? dom.keyMapMetaSelect.value : DEFAULT_KEY_MAP.meta,
       alt: dom.keyMapAltSelect ? dom.keyMapAltSelect.value : DEFAULT_KEY_MAP.alt,
       ctrl: dom.keyMapCtrlSelect ? dom.keyMapCtrlSelect.value : DEFAULT_KEY_MAP.ctrl,
@@ -54,6 +55,7 @@ export function createKeymapController(dom) {
 
   function applyKeyMapToForm(keyMap) {
     const km = { ...DEFAULT_KEY_MAP, ...(keyMap || {}) };
+    if (dom.keyMapModeSelect) dom.keyMapModeSelect.value = km.mode || DEFAULT_KEY_MAP.mode;
     if (dom.keyMapMetaSelect) dom.keyMapMetaSelect.value = km.meta || DEFAULT_KEY_MAP.meta;
     if (dom.keyMapAltSelect) dom.keyMapAltSelect.value = km.alt || DEFAULT_KEY_MAP.alt;
     if (dom.keyMapCtrlSelect) dom.keyMapCtrlSelect.value = km.ctrl || DEFAULT_KEY_MAP.ctrl;
@@ -71,6 +73,7 @@ export function createKeymapController(dom) {
   if (dom.btnKeymapMacWin) {
     dom.btnKeymapMacWin.addEventListener('click', () => {
       applyKeyMapToForm({
+        mode: dom.keyMapModeSelect ? dom.keyMapModeSelect.value : DEFAULT_KEY_MAP.mode,
         meta: 'Control',
         alt: 'Alt',
         ctrl: 'Meta',

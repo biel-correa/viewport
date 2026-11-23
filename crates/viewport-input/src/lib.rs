@@ -24,6 +24,15 @@ pub fn scancode_to_event(scancode: Scancode, pressed: bool) -> FastPathInputEven
     FastPathInputEvent::KeyboardEvent(flags, scancode.0)
 }
 
+/// Converts a UTF-16 code unit and press/release state into an RDP Unicode `FastPathInputEvent`.
+pub fn unicode_to_event(code_unit: u16, pressed: bool) -> FastPathInputEvent {
+    let mut flags = KeyboardFlags::empty();
+    if !pressed {
+        flags |= KeyboardFlags::RELEASE;
+    }
+    FastPathInputEvent::UnicodeKeyboardEvent(flags, code_unit)
+}
+
 /// Creates a mouse move `FastPathInputEvent` at the specified remote coordinates.
 pub fn mouse_move_event(x: u16, y: u16) -> FastPathInputEvent {
     FastPathInputEvent::MouseEvent(MousePdu {
@@ -122,6 +131,27 @@ mod tests {
                 assert!(flags.contains(KeyboardFlags::EXTENDED));
             }
             _ => panic!("Expected extended keyboard release event"),
+        }
+    }
+
+    #[test]
+    fn test_unicode_events() {
+        let press = unicode_to_event('ç' as u16, true);
+        match press {
+            FastPathInputEvent::UnicodeKeyboardEvent(flags, code) => {
+                assert_eq!(code, 0x00E7);
+                assert!(!flags.contains(KeyboardFlags::RELEASE));
+            }
+            _ => panic!("Expected unicode keyboard press event"),
+        }
+
+        let release = unicode_to_event('á' as u16, false);
+        match release {
+            FastPathInputEvent::UnicodeKeyboardEvent(flags, code) => {
+                assert_eq!(code, 0x00E1);
+                assert!(flags.contains(KeyboardFlags::RELEASE));
+            }
+            _ => panic!("Expected unicode keyboard release event"),
         }
     }
 

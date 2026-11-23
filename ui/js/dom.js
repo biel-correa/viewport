@@ -67,6 +67,7 @@ export function getDomRefs() {
     },
 
     // Keyboard Mapping Controls
+    keyMapModeSelect: document.getElementById('key-map-mode'),
     keyMapMetaSelect: document.getElementById('key-map-meta'),
     keyMapAltSelect: document.getElementById('key-map-alt'),
     keyMapCtrlSelect: document.getElementById('key-map-ctrl'),
@@ -78,6 +79,7 @@ export function getDomRefs() {
 
     // Session Canvas & Overlays
     rdpCanvas: document.getElementById('rdp-canvas'),
+    rdpImeInput: document.getElementById('rdp-ime-input'),
     tabContextMenu: document.getElementById('tab-context-menu'),
     ctxTabTitle: document.getElementById('ctx-tab-title'),
     ctxTabQuality: document.getElementById('ctx-tab-quality'),

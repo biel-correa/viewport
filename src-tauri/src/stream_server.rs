@@ -3,7 +3,10 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use futures_util::{SinkExt, StreamExt};
 use viewport_core::{DamageRegion, SessionId, SessionManager, SharedFrameBuffer};
-use viewport_input::{mouse_button_event, mouse_move_event, mouse_wheel_event, scancode_to_event, MouseButton, Scancode};
+use viewport_input::{
+    mouse_button_event, mouse_move_event, mouse_wheel_event, scancode_to_event, unicode_to_event,
+    MouseButton, Scancode,
+};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::Message;
@@ -29,6 +32,8 @@ enum ClientInputMessage {
         extended: bool,
         down: bool,
     },
+    #[serde(rename = "unicode")]
+    Unicode { text: String, down: bool },
     #[serde(rename = "resize")]
     Resize { width: u16, height: u16 },
 }
@@ -181,6 +186,12 @@ async fn handle_connection(
                                 let sc = Scancode(scancode, extended);
                                 let evt = scancode_to_event(sc, down);
                                 sm_input.send_input(session_id, evt).await;
+                            }
+                            ClientInputMessage::Unicode { text, down } => {
+                                for unit in text.encode_utf16() {
+                                    let evt = unicode_to_event(unit, down);
+                                    sm_input.send_input(session_id, evt).await;
+                                }
                             }
                             ClientInputMessage::Resize { width, height } => {
                                 sm_input.send_resize(session_id, width, height).await;

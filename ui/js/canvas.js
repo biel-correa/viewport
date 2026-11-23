@@ -1,8 +1,20 @@
-import { mappedCodeToScancode } from './scancodes.js';
+import { hasCustomKeyRule, mappedCodeToScancode } from './scancodes.js';
+
+function isPrintableUnicodeKey(e) {
+  if (!e || typeof e.key !== 'string' || e.key.length === 0) return false;
+  // Keep Space on hardware scancode unless produced as a dead-key accent (e.g. ´ + Space -> ´)
+  if (e.code === 'Space' && e.key === ' ') return false;
+  const chars = Array.from(e.key);
+  if (chars.length !== 1) return false;
+  const cp = chars[0].codePointAt(0);
+  return cp !== undefined && cp >= 0x20 && cp !== 0x7f;
+}
 
 export class RdpCanvasStream {
   constructor(canvasElement, sessionId, streamPort, options = {}) {
     this.canvas = canvasElement;
+    this.imeInput = options.imeInput || null;
+    this.keyTarget = this.imeInput || this.canvas;
     // Keep compositor double-buffering / V-Sync enabled (never pass desynchronized: true).
     this.ctx = canvasElement.getContext('2d', { alpha: false });
     this.stagingCanvas = document.createElement('canvas');
@@ -20,6 +32,8 @@ export class RdpCanvasStream {
     this.dynamicResize = options.dynamicResize !== false;
     this.keyMap = options.keyMap || null;
     this.pressedKeys = new Map();
+    this.pressedUnicode = new Map();
+    this.isComposing = false;
 
     this.ws = null;
     this.hasRealFrames = false;
@@ -280,6 +294,27 @@ export class RdpCanvasStream {
     });
   }
 
+  isUnicodeLayoutMode() {
+    return !this.keyMap || (this.keyMap.mode || 'unicode') === 'unicode';
+  }
+
+  sendUnicode(text, down) {
+    if (!text || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: 'unicode', text, down }));
+  }
+
+  sendUnicodeTap(text) {
+    if (!text || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.sendUnicode(text, true);
+    this.sendUnicode(text, false);
+  }
+
+  focusInput() {
+    if (this.keyTarget && typeof this.keyTarget.focus === 'function') {
+      this.keyTarget.focus({ preventScroll: true });
+    }
+  }
+
   setupInputListeners() {
     const sig = { signal: this.abortController.signal };
 
@@ -326,10 +361,38 @@ export class RdpCanvasStream {
       this.ws.send(JSON.stringify({ type: 'wheel', x, y, delta }));
     }, { passive: false, signal: this.abortController.signal });
 
-    this.canvas.addEventListener('keydown', (e) => {
+    const handleKeyDown = (e) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+      const unicodeMode = this.isUnicodeLayoutMode();
+      const hasShortcutMod = e.ctrlKey || e.metaKey || e.altKey;
+
+      // Let macOS/OS dead-key & IME composition (e.g. ´ + a -> á, ~ + o -> õ) resolve inside the IME proxy
+      if (
+        unicodeMode &&
+        !hasShortcutMod &&
+        (this.isComposing || e.isComposing || e.key === 'Dead' || e.key === 'Process' || e.keyCode === 229)
+      ) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
+
+      if (
+        unicodeMode &&
+        !hasShortcutMod &&
+        !hasCustomKeyRule(e.code, this.keyMap) &&
+        isPrintableUnicodeKey(e)
+      ) {
+        if (e.repeat && this.pressedUnicode.has(e.code)) {
+          this.sendUnicode(this.pressedUnicode.get(e.code), false);
+        }
+        this.pressedUnicode.set(e.code, e.key);
+        this.sendUnicode(e.key, true);
+        return;
+      }
+
       const sc = mappedCodeToScancode(e.code, this.keyMap);
       if (sc) {
         this.pressedKeys.set(e.code, sc);
@@ -340,10 +403,24 @@ export class RdpCanvasStream {
           down: true
         }));
       }
-    }, sig);
+    };
 
-    this.canvas.addEventListener('keyup', (e) => {
+    const handleKeyUp = (e) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+      if (this.pressedUnicode.has(e.code)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = this.pressedUnicode.get(e.code);
+        this.pressedUnicode.delete(e.code);
+        this.sendUnicode(text, false);
+        return;
+      }
+
+      if (this.isUnicodeLayoutMode() && (this.isComposing || e.isComposing || e.key === 'Dead')) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
       const sc = this.pressedKeys.get(e.code) || mappedCodeToScancode(e.code, this.keyMap);
@@ -356,16 +433,58 @@ export class RdpCanvasStream {
           down: false
         }));
       }
-    }, sig);
+    };
 
-    this.canvas.addEventListener('blur', () => this.releaseAllPressedKeys(), sig);
+    const keyTargets = this.imeInput && this.imeInput !== this.canvas
+      ? [this.imeInput, this.canvas]
+      : [this.canvas];
+
+    keyTargets.forEach((target) => {
+      target.addEventListener('keydown', handleKeyDown, sig);
+      target.addEventListener('keyup', handleKeyUp, sig);
+      target.addEventListener('blur', () => this.releaseAllPressedKeys(), sig);
+    });
+
+    if (this.imeInput) {
+      this.imeInput.value = '';
+      this.imeInput.addEventListener('compositionstart', () => {
+        this.isComposing = true;
+      }, sig);
+
+      this.imeInput.addEventListener('compositionend', (e) => {
+        this.isComposing = false;
+        const composed = e.data || this.imeInput.value || '';
+        this.imeInput.value = '';
+        if (composed && this.isUnicodeLayoutMode()) {
+          this.sendUnicodeTap(composed);
+        }
+      }, sig);
+
+      this.imeInput.addEventListener('input', () => {
+        if (this.isComposing) return;
+        const text = this.imeInput.value;
+        this.imeInput.value = '';
+        if (text && this.isUnicodeLayoutMode()) {
+          this.sendUnicodeTap(text);
+        }
+      }, sig);
+    }
   }
 
   releaseAllPressedKeys() {
+    this.isComposing = false;
+    if (this.imeInput) {
+      this.imeInput.value = '';
+    }
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.pressedKeys.clear();
+      this.pressedUnicode.clear();
       return;
     }
+    for (const text of this.pressedUnicode.values()) {
+      this.sendUnicode(text, false);
+    }
+    this.pressedUnicode.clear();
     for (const sc of this.pressedKeys.values()) {
       this.ws.send(JSON.stringify({
         type: 'key',

@@ -33,6 +33,16 @@ export function createSessionController({ state, dom, onEditFromError }) {
     dom.tabContextMenu.style.top = `${Math.max(8, y)}px`;
   }
 
+  function focusSessionInput() {
+    if (state.activeStream) {
+      state.activeStream.focusInput();
+    } else if (dom.rdpImeInput) {
+      dom.rdpImeInput.focus({ preventScroll: true });
+    } else if (dom.rdpCanvas) {
+      dom.rdpCanvas.focus({ preventScroll: true });
+    }
+  }
+
   function captureCanvasInput() {
     state.canvasInputCaptured = true;
     dom.rdpCanvas.classList.add('captured');
@@ -87,6 +97,7 @@ export function createSessionController({ state, dom, onEditFromError }) {
       {
         width,
         height,
+        imeInput: dom.rdpImeInput || null,
         swapMouse: dom.chkSwapMouse && dom.chkSwapMouse.checked,
         dynamicResize: dom.chkDynamicRes ? dom.chkDynamicRes.checked : true,
         keyMap: tab.keyMap || null,
@@ -230,13 +241,14 @@ export function createSessionController({ state, dom, onEditFromError }) {
       } else {
         dom.connectingOverlay.classList.add('hidden');
         dom.errorModal.classList.add('hidden');
-        if (dom.rdpCanvas) {
-          dom.rdpCanvas.focus();
-          captureCanvasInput();
-        }
       }
 
       ensureStreamForTab(activeTab);
+
+      if (activeTab.status === 'connected' && dom.rdpCanvas) {
+        focusSessionInput();
+        captureCanvasInput();
+      }
     }
   }
 
@@ -482,7 +494,7 @@ export function createSessionController({ state, dom, onEditFromError }) {
   async function toggleFullscreen() {
     const refocusCanvasIfActive = () => {
       if (dom.rdpCanvas && dom.sessionView && !dom.sessionView.classList.contains('hidden')) {
-        dom.rdpCanvas.focus();
+        focusSessionInput();
         captureCanvasInput();
       }
     };
@@ -719,8 +731,9 @@ export function createSessionController({ state, dom, onEditFromError }) {
   window.addEventListener('resize', closeTabContextMenu);
 
   if (dom.rdpCanvas) {
-    dom.rdpCanvas.addEventListener('mousedown', () => {
-      dom.rdpCanvas.focus();
+    dom.rdpCanvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      focusSessionInput();
       captureCanvasInput();
     });
 
@@ -731,7 +744,10 @@ export function createSessionController({ state, dom, onEditFromError }) {
   }
 
   window.addEventListener('keydown', (e) => {
-    const canvasHasFocus = state.canvasInputCaptured || document.activeElement === dom.rdpCanvas;
+    const canvasHasFocus =
+      state.canvasInputCaptured ||
+      document.activeElement === dom.rdpCanvas ||
+      (dom.rdpImeInput && document.activeElement === dom.rdpImeInput);
     const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
     const inActiveSession = Boolean(activeTab && activeTab.type === 'session' && activeTab.status === 'connected');
 

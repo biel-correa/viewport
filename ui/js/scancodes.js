@@ -102,12 +102,21 @@ const SCANCODE_MAP = {
 export const ALL_KEY_CODES = Object.keys(SCANCODE_MAP);
 
 export const DEFAULT_KEY_MAP = {
+  mode: 'unicode',
   meta: 'Meta',
   alt: 'Alt',
   ctrl: 'Control',
   caps: 'CapsLock',
   custom: []
 };
+
+export function hasCustomKeyRule(code, keyMap) {
+  return Boolean(
+    keyMap &&
+      Array.isArray(keyMap.custom) &&
+      keyMap.custom.some((r) => r && r.from === code)
+  );
+}
 
 function resolveModifierSide(sourceCode, targetFamily) {
   if (!targetFamily || targetFamily === 'None') return null;

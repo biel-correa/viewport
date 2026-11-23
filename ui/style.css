@@ -1660,3 +1660,19 @@ body.is-tauri .traffic-lights .tl-btn {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+
+.rdp-ime-input {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
