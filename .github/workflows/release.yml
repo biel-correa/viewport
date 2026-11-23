@@ -195,9 +195,13 @@ jobs:
           CI: "true"
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+            unset APPLE_SIGNING_IDENTITY
+          fi
           if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
             echo "Signing key detected: enabling signed Tauri updater artifacts."
             npx --yes @tauri-apps/cli build ${{ matrix.tauri_args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
@@ -356,6 +360,11 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ViewPort ${{ steps.meta.outputs.tag }}
+          body: |
+            > **macOS note:** If macOS Gatekeeper blocks the downloaded app or repeatedly prompts for Microphone/Camera permissions, clear the browser quarantine flag once after moving `ViewPort.app` into `/Applications`:
+            > ```bash
+            > xattr -cr /Applications/ViewPort.app
+            > ```
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(steps.meta.outputs.tag, '-') }}

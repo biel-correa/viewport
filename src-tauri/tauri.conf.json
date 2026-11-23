@@ -39,7 +39,9 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "entitlements": "Entitlements.plist",
+      "signingIdentity": "-"
     }
   },
   "plugins": {
