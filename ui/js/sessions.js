@@ -733,13 +733,20 @@ export function createSessionController({ state, dom, onEditFromError }) {
   if (dom.rdpCanvas) {
     dom.rdpCanvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
+      window.getSelection?.()?.removeAllRanges?.();
       focusSessionInput();
       captureCanvasInput();
     });
 
     dom.rdpCanvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      window.getSelection?.()?.removeAllRanges?.();
       return false;
+    });
+
+    dom.rdpCanvas.addEventListener('selectstart', (e) => {
+      e.preventDefault();
     });
   }
 

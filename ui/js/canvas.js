@@ -338,12 +338,24 @@ export class RdpCanvasStream {
     }, sig);
 
     this.canvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      window.getSelection?.()?.removeAllRanges?.();
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       const { x, y } = this.getRemoteCoords(e);
       this.lastMouseX = x;
       this.lastMouseY = y;
       const button = this.resolveMouseButton(e.button);
       this.ws.send(JSON.stringify({ type: 'mousebutton', button, down: true, x, y }));
+    }, sig);
+
+    this.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.getSelection?.()?.removeAllRanges?.();
+    }, sig);
+
+    this.canvas.addEventListener('selectstart', (e) => {
+      e.preventDefault();
     }, sig);
 
     this.canvas.addEventListener('mouseup', (e) => {
