@@ -327,9 +327,9 @@ export class RdpCanvasStream {
     }, { passive: false, signal: this.abortController.signal });
 
     this.canvas.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') return;
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       e.preventDefault();
+      e.stopPropagation();
       const sc = mappedCodeToScancode(e.code, this.keyMap);
       if (sc) {
         this.pressedKeys.set(e.code, sc);
@@ -343,9 +343,9 @@ export class RdpCanvasStream {
     }, sig);
 
     this.canvas.addEventListener('keyup', (e) => {
-      if (e.key === 'Escape') return;
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       e.preventDefault();
+      e.stopPropagation();
       const sc = this.pressedKeys.get(e.code) || mappedCodeToScancode(e.code, this.keyMap);
       this.pressedKeys.delete(e.code);
       if (sc) {

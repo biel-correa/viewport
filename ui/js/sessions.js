@@ -230,6 +230,10 @@ export function createSessionController({ state, dom, onEditFromError }) {
       } else {
         dom.connectingOverlay.classList.add('hidden');
         dom.errorModal.classList.add('hidden');
+        if (dom.rdpCanvas) {
+          dom.rdpCanvas.focus();
+          captureCanvasInput();
+        }
       }
 
       ensureStreamForTab(activeTab);
@@ -476,17 +480,26 @@ export function createSessionController({ state, dom, onEditFromError }) {
   }
 
   async function toggleFullscreen() {
+    const refocusCanvasIfActive = () => {
+      if (dom.rdpCanvas && dom.sessionView && !dom.sessionView.classList.contains('hidden')) {
+        dom.rdpCanvas.focus();
+        captureCanvasInput();
+      }
+    };
+
     if (isTauri) {
       try {
         await invoke('toggle_fullscreen', {});
+        refocusCanvasIfActive();
         return;
       } catch (_) {}
     }
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+      await document.documentElement.requestFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen().catch(() => {});
+      await document.exitFullscreen().catch(() => {});
     }
+    refocusCanvasIfActive();
   }
 
   function startSessionStatusPolling() {
@@ -719,6 +732,21 @@ export function createSessionController({ state, dom, onEditFromError }) {
 
   window.addEventListener('keydown', (e) => {
     const canvasHasFocus = state.canvasInputCaptured || document.activeElement === dom.rdpCanvas;
+    const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+    const inActiveSession = Boolean(activeTab && activeTab.type === 'session' && activeTab.status === 'connected');
+
+    if (e.key === 'Escape') {
+      if (dom.tabContextMenu && !dom.tabContextMenu.classList.contains('hidden')) {
+        closeTabContextMenu();
+        return;
+      }
+      // Prevent OS/WebView from exiting fullscreen or canceling when inside an active RDP session
+      if (canvasHasFocus || inActiveSession) {
+        e.preventDefault();
+      }
+      return;
+    }
+
     if (!canvasHasFocus && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       if (!state.detachedWindowMode) {
@@ -735,12 +763,6 @@ export function createSessionController({ state, dom, onEditFromError }) {
         dom.pcNameInput.select();
       }
       return;
-    }
-    if (e.key === 'Escape') {
-      closeTabContextMenu();
-      if (state.canvasInputCaptured) {
-        releaseCanvasInput();
-      }
     }
   });
 
