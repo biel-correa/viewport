@@ -1684,8 +1684,9 @@ body.is-tauri .traffic-lights .tl-btn {
   position: fixed;
   top: 0;
   left: 0;
-  width: 1px;
-  height: 1px;
+  width: 2px;
+  height: 2px;
+  font-size: 16px;
   opacity: 0;
   border: none;
   padding: 0;
@@ -1693,5 +1694,11 @@ body.is-tauri .traffic-lights .tl-btn {
   resize: none;
   overflow: hidden;
   pointer-events: none;
-  z-index: -1;
+  user-select: text;
+  -webkit-user-select: text;
+  z-index: 1;
+}
+
+.rdp-ime-input::selection {
+  background: transparent;
 }

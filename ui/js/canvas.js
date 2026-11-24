@@ -34,6 +34,8 @@ export class RdpCanvasStream {
     this.pressedKeys = new Map();
     this.pressedUnicode = new Map();
     this.isComposing = false;
+    this.handledComposition = false;
+    this.lastKeyWasDead = false;
 
     this.ws = null;
     this.hasRealFrames = false;
@@ -339,7 +341,10 @@ export class RdpCanvasStream {
 
     this.canvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      window.getSelection?.()?.removeAllRanges?.();
+      if (!this.imeInput || document.activeElement !== this.imeInput) {
+        window.getSelection?.()?.removeAllRanges?.();
+      }
+      this.focusInput();
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       const { x, y } = this.getRemoteCoords(e);
       this.lastMouseX = x;
@@ -351,7 +356,10 @@ export class RdpCanvasStream {
     this.canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      window.getSelection?.()?.removeAllRanges?.();
+      if (!this.imeInput || document.activeElement !== this.imeInput) {
+        window.getSelection?.()?.removeAllRanges?.();
+      }
+      this.focusInput();
     }, sig);
 
     this.canvas.addEventListener('selectstart', (e) => {
@@ -373,37 +381,81 @@ export class RdpCanvasStream {
       this.ws.send(JSON.stringify({ type: 'wheel', x, y, delta }));
     }, { passive: false, signal: this.abortController.signal });
 
+    const releaseAltModifiers = () => {
+      for (const altCode of ['AltLeft', 'AltRight']) {
+        const sc = this.pressedKeys.get(altCode);
+        if (sc) {
+          this.pressedKeys.delete(altCode);
+          this.ws.send(JSON.stringify({
+            type: 'key',
+            scancode: sc.scancode,
+            extended: sc.extended,
+            down: false
+          }));
+        }
+      }
+    };
+
     const handleKeyDown = (e) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
       const unicodeMode = this.isUnicodeLayoutMode();
-      const hasShortcutMod = e.ctrlKey || e.metaKey || e.altKey;
+      const hasCtrlOrMeta = e.ctrlKey || e.metaKey;
+      const isModifierKey =
+        e.code === 'ShiftLeft' ||
+        e.code === 'ShiftRight' ||
+        e.code === 'ControlLeft' ||
+        e.code === 'ControlRight' ||
+        e.code === 'AltLeft' ||
+        e.code === 'AltRight' ||
+        e.code === 'MetaLeft' ||
+        e.code === 'MetaRight' ||
+        e.code === 'CapsLock';
+      const isDeadOrComposing =
+        this.isComposing || e.isComposing || e.key === 'Dead' || e.key === 'Process' || e.keyCode === 229;
 
-      // Let macOS/OS dead-key & IME composition (e.g. ´ + a -> á, ~ + o -> õ) resolve inside the IME proxy
-      if (
-        unicodeMode &&
-        !hasShortcutMod &&
-        (this.isComposing || e.isComposing || e.key === 'Dead' || e.key === 'Process' || e.keyCode === 229)
-      ) {
-        return;
+      if (unicodeMode && !hasCtrlOrMeta) {
+        // Dead keys (both standalone ´/~/`/^ and macOS Option+e/n/i/u/` dead keys) and active IME composition
+        if (isDeadOrComposing) {
+          if (e.key === 'Dead') {
+            this.lastKeyWasDead = true;
+          }
+          if (e.altKey) {
+            releaseAltModifiers();
+          }
+          return;
+        }
+
+        // Let printable text flow natively into the hidden IME textarea so macOS dead keys
+        // (e.g. ´ + e -> é, ~ + o -> õ, ´ + Space -> ´) and OS keyboard layouts always compose accurately.
+        const isSpaceDuringDead = e.code === 'Space' && (e.key !== ' ' || this.lastKeyWasDead);
+        if (!isModifierKey) {
+          this.lastKeyWasDead = false;
+        }
+        const isPrintable =
+          !e.altKey &&
+          !hasCustomKeyRule(e.code, this.keyMap) &&
+          (isPrintableUnicodeKey(e) || isSpaceDuringDead);
+
+        if (isPrintable) {
+          if (this.imeInput && e.currentTarget === this.imeInput) {
+            // Do not call preventDefault(): browser commits the exact OS character via `input` / `compositionend`
+            return;
+          }
+          // Fallback if focus is on <canvas> instead of the IME textarea
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.repeat && this.pressedUnicode.has(e.code)) {
+            this.sendUnicode(this.pressedUnicode.get(e.code), false);
+          }
+          this.pressedUnicode.set(e.code, e.key);
+          this.sendUnicode(e.key, true);
+          return;
+        }
       }
 
       e.preventDefault();
       e.stopPropagation();
-
-      if (
-        unicodeMode &&
-        !hasShortcutMod &&
-        !hasCustomKeyRule(e.code, this.keyMap) &&
-        isPrintableUnicodeKey(e)
-      ) {
-        if (e.repeat && this.pressedUnicode.has(e.code)) {
-          this.sendUnicode(this.pressedUnicode.get(e.code), false);
-        }
-        this.pressedUnicode.set(e.code, e.key);
-        this.sendUnicode(e.key, true);
-        return;
-      }
 
       const sc = mappedCodeToScancode(e.code, this.keyMap);
       if (sc) {
@@ -429,7 +481,7 @@ export class RdpCanvasStream {
         return;
       }
 
-      if (this.isUnicodeLayoutMode() && (this.isComposing || e.isComposing || e.key === 'Dead')) {
+      if (this.isUnicodeLayoutMode() && !this.pressedKeys.has(e.code)) {
         return;
       }
 
@@ -461,22 +513,27 @@ export class RdpCanvasStream {
       this.imeInput.value = '';
       this.imeInput.addEventListener('compositionstart', () => {
         this.isComposing = true;
+        this.handledComposition = false;
       }, sig);
 
       this.imeInput.addEventListener('compositionend', (e) => {
         this.isComposing = false;
-        const composed = e.data || this.imeInput.value || '';
+        const composed = this.imeInput.value || e.data || '';
         this.imeInput.value = '';
-        if (composed && this.isUnicodeLayoutMode()) {
+        if (!this.handledComposition && composed && this.isUnicodeLayoutMode()) {
           this.sendUnicodeTap(composed);
         }
+        this.handledComposition = false;
       }, sig);
 
-      this.imeInput.addEventListener('input', () => {
-        if (this.isComposing) return;
+      this.imeInput.addEventListener('input', (e) => {
+        if (this.isComposing || e.isComposing) return;
         const text = this.imeInput.value;
         this.imeInput.value = '';
         if (text && this.isUnicodeLayoutMode()) {
+          if (e.inputType === 'insertFromComposition') {
+            this.handledComposition = true;
+          }
           this.sendUnicodeTap(text);
         }
       }, sig);
@@ -485,6 +542,8 @@ export class RdpCanvasStream {
 
   releaseAllPressedKeys() {
     this.isComposing = false;
+    this.handledComposition = false;
+    this.lastKeyWasDead = false;
     if (this.imeInput) {
       this.imeInput.value = '';
     }

@@ -729,11 +729,20 @@ export function createSessionController({ state, dom, onEditFromError }) {
 
   window.addEventListener('blur', closeTabContextMenu);
   window.addEventListener('resize', closeTabContextMenu);
+  window.addEventListener('focus', () => {
+    const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+    if (activeTab && activeTab.type === 'session' && activeTab.status === 'connected') {
+      focusSessionInput();
+      captureCanvasInput();
+    }
+  });
 
   if (dom.rdpCanvas) {
     dom.rdpCanvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      window.getSelection?.()?.removeAllRanges?.();
+      if (!dom.rdpImeInput || document.activeElement !== dom.rdpImeInput) {
+        window.getSelection?.()?.removeAllRanges?.();
+      }
       focusSessionInput();
       captureCanvasInput();
     });
@@ -741,7 +750,10 @@ export function createSessionController({ state, dom, onEditFromError }) {
     dom.rdpCanvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      window.getSelection?.()?.removeAllRanges?.();
+      if (!dom.rdpImeInput || document.activeElement !== dom.rdpImeInput) {
+        window.getSelection?.()?.removeAllRanges?.();
+      }
+      focusSessionInput();
       return false;
     });
 
